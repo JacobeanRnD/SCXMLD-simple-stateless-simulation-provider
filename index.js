@@ -10,7 +10,7 @@ var scxml = require('scxml'),
 var tmpFolder = 'tmp';
 var instanceSubscriptions = {};
 
-module.exports = function () {
+module.exports = function (db) {
   var server = {};
   
   function completeInstantly () {
@@ -56,8 +56,6 @@ module.exports = function () {
   };
 
   function react (instanceId, snapshot, event, done) {
-    var chartName = getStatechartName(instanceId);
-
     //Check if chartname.scxml folder exists
       //If it does
       //Use scxml.pathToModel
@@ -72,22 +70,63 @@ module.exports = function () {
       //Send the event
     //Return config
 
-   /* instance.listener = {
-      onEntry : function(stateId){
-        response.write('event: onEntry\n');
-        response.write('data: ' + stateId + '\n\n');
-      },
-      onExit : function(stateId){
-        response.write('event: onExit\n');
-        response.write('data: ' + stateId + '\n\n');
+    var chartName = getStatechartName(instanceId);
+    var statechartFolder = path.join(tmpFolder, chartName);
+
+    fs.exists(statechartFolder, function (exists) {
+      if(exists) {
+        var mainFilePath = path.resolve(path.join(statechartFolder, 'index.scxml'));
+
+        scxml.pathToModel(mainFilePath, createAndStartInstance);
+      } else {
+        db.getStatechart(chartName, function (err, scxmlString) {
+          if(err) return done(err);
+
+          scxml.documentStringToModel(null, scxmlString, createAndStartInstance);  
+        });
       }
-      //TODO: spec this out
-      // onTransition : function(sourceStateId,targetStatesIds){}
-    };
+    });
+    
+    function createAndStartInstance (err, model) {
+      if(err) return done(err);
 
-    instance.registerListener(instance.listener);*/
+      console.log('snapshot', snapshot);
 
-    done(null, conf);
+      console.log(model.toString());
+      
+      var instance = new scxml.scion.Statechart(model, { snapshot: snapshot, sessionid: instanceId });
+      
+      instance.registerListener({
+        onEntry: publishChanges('onEntry'),
+        onExit: publishChanges('onExit')
+      });
+
+      //Don't start the instance from the beginning if there no snapshot
+      if(!snapshot) instance.start();
+
+      //Process the event
+      if(event) instance.gen(event);
+
+      //Get final configuration
+      var conf = instance.getSnapshot();
+
+      console.log('conf1', conf);
+
+      return done(null, conf);
+    }
+
+    function publishChanges (eventName) {
+      return function (stateId) {
+        var subscriptions = instanceSubscriptions[instanceId];
+
+        if(!subscriptions) return;
+
+        subscriptions.forEach(function (response) {
+          response.write('event: ' + eventName +'\n');
+          response.write('data: ' + stateId + '\n\n');
+        });
+      };
+    }
   }
 
   server.createInstance = function (chartName, id, done) {
@@ -101,10 +140,12 @@ module.exports = function () {
   };
 
   server.sendEvent = function (id, event, done) {
-    //Query snapshot
-    var snapshot;
+    var chartName = getStatechartName(id);
 
-    react(id, snapshot, event, done);
+    db.getInstance(chartName, id, function (err, snapshot) {
+      console.log(id, snapshot, event);
+      react(id, snapshot, event, done);
+    });
   };
 
   server.registerListener = function (id, response, done) {
@@ -119,8 +160,10 @@ module.exports = function () {
   server.unregisterAllListeners = function (id, done) {
     var subscriptions = instanceSubscriptions[id];
 
-    subscriptions.forEach(function (sub) {
-      sub.end();
+    if(!subscriptions) return done();
+
+    subscriptions.forEach(function (response) {
+      response.end();
     });
 
     delete instanceSubscriptions[id];
@@ -132,9 +175,18 @@ module.exports = function () {
     //instanceSubscriptions
     var subscriptions = instanceSubscriptions[id];
 
+    if(!subscriptions) return done();
     //TODO: somehow remove using response object?
     //Any unique identifier in response?
     //http://stackoverflow.com/a/26707009/1744033
+    instanceSubscriptions[id] = subscriptions.filter(function (subResponse) {
+      if(response.uniqueId === subResponse.uniqueId) {
+        response.end();
+        return false;
+      }
+
+      return true;
+    });
 
     if(done) done();
   };
