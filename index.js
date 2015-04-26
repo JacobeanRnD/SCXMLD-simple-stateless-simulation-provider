@@ -5,7 +5,8 @@ var scxml = require('scxml'),
   path = require('path'),
   uuid = require('uuid'),
   rmdir = require('rimraf'),
-  tar = require('tar');
+  tar = require('tar'),
+  sendAction = require('./sendAction');
 
 var tmpFolder = 'tmp';
 var instanceSubscriptions = {};
@@ -89,13 +90,24 @@ module.exports = function (db) {
     
     function createAndStartInstance (err, model) {
       if(err) return done(err);
-
-      console.log('snapshot', snapshot);
-
-      console.log(model.toString());
       
-      var instance = new scxml.scion.Statechart(model, { snapshot: snapshot, sessionid: instanceId });
-      
+      var instance = new scxml.scion.Statechart(model, {
+        snapshot: snapshot,
+        sessionid: instanceId,
+        interpreterScriptingContext : { 
+          send : sendAction,
+          raise : function(event){
+            instance._internalEventQueue.push(event); 
+          },
+          cancel : function(){
+            //TODO: implement cancel
+          },
+          log : console.log
+        }
+      });
+
+      //console.log(instance);
+
       instance.registerListener({
         onEntry: publishChanges('onEntry'),
         onExit: publishChanges('onExit')
