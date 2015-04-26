@@ -99,8 +99,8 @@ module.exports = function (db) {
           raise : function(event){
             instance._internalEventQueue.push(event); 
           },
-          cancel : function(){
-            //TODO: implement cancel
+          cancel : function(sendid) {
+            if(this._timeoutMap[sendid]) clearTimeout(this._timeoutMap[sendid]);
           },
           log : console.log
         }

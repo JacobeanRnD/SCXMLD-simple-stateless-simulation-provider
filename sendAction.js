@@ -73,5 +73,9 @@ module.exports = function (event, options) {
   }
 
   var delay = options.delay;
-  setTimeout(n,delay || 0);    //TODO: store timeout in a timeout map to support <cancel>
+  var timeoutId = setTimeout(n,delay || 1);
+
+  this._timeoutMap = this._timeoutMap || [];
+
+  if (options.sendid) this._timeoutMap[options.sendid] = timeoutId;
 };
