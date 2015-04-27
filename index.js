@@ -94,16 +94,7 @@ module.exports = function (db) {
       var instance = new scxml.scion.Statechart(model, {
         snapshot: snapshot,
         sessionid: instanceId,
-        interpreterScriptingContext : { 
-          send : sendAction,
-          raise : function(event){
-            instance._internalEventQueue.push(event); 
-          },
-          cancel : function(sendid) {
-            if(this._timeoutMap[sendid]) clearTimeout(this._timeoutMap[sendid]);
-          },
-          log : console.log
-        }
+        customSend: sendAction
       });
 
       //console.log(instance);
