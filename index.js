@@ -82,6 +82,7 @@ module.exports = function (db) {
       } else {
         db.getStatechart(chartName, function (err, scxmlString) {
           if(err) return done(err);
+          if(!scxmlString) return done({ statusCode: 404});
 
           scxml.documentStringToModel(null, scxmlString, createAndStartInstance);  
         });
@@ -97,8 +98,6 @@ module.exports = function (db) {
         customSend: sendAction
       });
 
-      //console.log(instance);
-
       instance.registerListener({
         onEntry: publishChanges('onEntry'),
         onExit: publishChanges('onExit')
@@ -112,8 +111,6 @@ module.exports = function (db) {
 
       //Get final configuration
       var conf = instance.getSnapshot();
-
-      console.log('conf1', conf);
 
       return done(null, conf);
     }
@@ -145,10 +142,13 @@ module.exports = function (db) {
   server.sendEvent = function (id, event, done) {
     var chartName = getStatechartName(id);
 
-    db.getInstance(chartName, id, function (err, snapshot) {
-      console.log(id, snapshot, event);
-      react(id, snapshot, event, done);
-    });
+    if(event.name === 'system.start') {
+      server.startInstance(id, done);
+    } else {
+      db.getInstance(chartName, id, function (err, snapshot) {
+        react(id, snapshot, event, done);
+      });
+    }
   };
 
   server.registerListener = function (id, response, done) {
