@@ -1,62 +1,37 @@
 'use strict';
 
 var scxml = require('scxml'),
-  fs = require('fs'),
-  path = require('path'),
   uuid = require('uuid'),
-  rmdir = require('rimraf'),
-  tar = require('tar'),
-  sendAction = require('./sendAction');
+  request = require('request');
 
-var tmpFolder = 'tmp';
 var instanceSubscriptions = {};
 
-module.exports = function (db) {
+module.exports = function (db, model) {
   var server = {};
+  var timeoutMap = {};
   
   function completeInstantly () {
     //Call last argument
     arguments[arguments.length -1]();
   }
 
-  function getStatechartName (instanceId) {
-    return instanceId.split('/')[0]; 
+  function sendEventToSelf(event, sendUrl){
+    var selfUrl = sendUrl || process.env.SEND_URL + event.origin;
+    
+    var options = {
+      method : 'POST',
+      json : event,
+      url : selfUrl
+    };
+
+    console.log('sending event to self', options);
+
+    request(options,function(error, response){
+      if(error) console.error('error sending event to server', error || response.body);
+    });
   }
 
-  //Delete old temp folder
-  //Create temporary folder for tar streams  
-  rmdir.sync(tmpFolder);
-  fs.mkdir(tmpFolder);
-
-  server.createStatechartWithTar = function (chartName, pack, done) {
-    var statechartFolder = path.join(tmpFolder, chartName);
-
-    rmdir(statechartFolder, function (err) {
-      if(err) return done(err);
-
-      fs.mkdir(statechartFolder, function () {
-        var extractor = tar.Extract({path: statechartFolder })
-          .on('error', function (err) { done(err); })
-          .on('end', function () {
-            done();
-          });
-
-        //Route tar stream to our file system and finalize
-        pack.pipe(extractor);
-        pack.finalize();
-      });
-    });
-  };
-
-  server.createStatechart = function (chartName, scxmlString, done) {
-    //We are doing this because it will cause a bug otherwise
-    //if user used tar streams, starts using normal createStatechart endpoint
-    var statechartFolder = path.join(tmpFolder, chartName);
-
-    rmdir(statechartFolder, done);
-  };
-
-  function react (instanceId, snapshot, event, done) {
+  function react (instanceId, snapshot, event, sendUrl, done) {
     //Check if chartname.scxml folder exists
       //If it does
       //Use scxml.pathToModel
@@ -71,49 +46,79 @@ module.exports = function (db) {
       //Send the event
     //Return config
 
-    var chartName = getStatechartName(instanceId);
-    var statechartFolder = path.join(tmpFolder, chartName);
+    var instance = new scxml.scion.Statechart(model, {
+      snapshot: snapshot,
+      sessionid: instanceId,
+      customSend: function (event, options, sendUrl) {
+        console.log('customSend',event);
 
-    fs.exists(statechartFolder, function (exists) {
-      if(exists) {
-        var mainFilePath = path.resolve(path.join(statechartFolder, 'index.scxml'));
+        var n;
 
-        scxml.pathToModel(mainFilePath, createAndStartInstance);
-      } else {
-        db.getStatechart(chartName, function (err, scxmlString) {
-          if(err) return done(err);
-          if(!scxmlString) return done({ statusCode: 404});
+        switch(event.type) {
+          case 'http://www.w3.org/TR/scxml/#SCXMLEventProcessor':
+            //normalize to an HTTP event
+            //assume this is of the form '/foo/bar/bat'
+          case 'http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor':
+            if(!event.target) {
+              n = function () {
+                sendEventToSelf(event, sendUrl);
+              };
+            } else {
+              n = function(){
+                var options = {
+                  method : 'POST',
+                  json : event,
+                  url : event.target
+                };
+                request(options,function(error, body, response ) {
+                  //ignore the response for now
+                  //console.log('send response', body);
+                });
+              };
+            }
 
-          scxml.documentStringToModel(null, scxmlString, createAndStartInstance);  
-        });
+            break;
+
+          case 'http://scxml.io/scxmld':
+            if(event.target === 'scxml://publish'){
+              var subscriptions = instanceSubscriptions[instanceId];
+              console.log('subscriptions for instance', instanceId, subscriptions);
+              subscriptions.forEach(function(response){
+                console.log('response',response);
+                response.write('event: ' + event.name + '\n');
+                response.write('data: ' + JSON.stringify(event.data) + '\n\n');
+              });
+            } 
+            break;
+          default:
+            console.log('wrong processor', event.type);
+            break;
+        }
+
+        var timeoutId = setTimeout(n, options.delay || 0);
+        if (options.sendid) timeoutMap[options.sendid] = timeoutId;
+      },
+      customCancel: function (sendid) {
+        clearTimeout(timeoutMap[sendid]);
+        delete timeoutMap[sendid];
       }
     });
+
+    instance.registerListener({
+      onEntry: publishChanges('onEntry'),
+      onExit: publishChanges('onExit')
+    });
+
+    //Don't start the instance from the beginning if there no snapshot
+    if(!snapshot) instance.start();
+
+    //Process the event
+    if(event) instance.gen(event);
+
+    //Get final configuration
+    var conf = instance.getSnapshot();
     
-    function createAndStartInstance (err, model) {
-      if(err) return done(err);
-      
-      var instance = new scxml.scion.Statechart(model, {
-        snapshot: snapshot,
-        sessionid: instanceId,
-        customSend: sendAction
-      });
-
-      instance.registerListener({
-        onEntry: publishChanges('onEntry'),
-        onExit: publishChanges('onExit')
-      });
-
-      //Don't start the instance from the beginning if there no snapshot
-      if(!snapshot) instance.start();
-
-      //Process the event
-      if(event) instance.gen(event);
-
-      //Get final configuration
-      var conf = instance.getSnapshot();
-
-      return done(null, conf);
-    }
+    done(null, conf);
 
     function publishChanges (eventName) {
       return function (stateId) {
@@ -129,25 +134,28 @@ module.exports = function (db) {
     }
   }
 
-  server.createInstance = function (chartName, id, done) {
-    var instanceId = chartName + '/' + (id || uuid.v1());
+  server.createInstance = function (id, done) {
+    var instanceId = id || uuid.v1();
 
     done(null, instanceId);
   };
 
-  server.startInstance = function (id, done) {
-    react(id, null, null, done);
+  server.startInstance = function (id, sendUrl, done) {
+    react(id, null, null, sendUrl, done);
   };
 
-  server.sendEvent = function (id, event, done) {
-    var chartName = getStatechartName(id);
-
+  server.sendEvent = function (id, event, sendUrl, eventUuid, done, respond) {
     if(event.name === 'system.start') {
-      server.startInstance(id, done);
+      server.startInstance(id, sendUrl, finish);
     } else {
-      db.getInstance(chartName, id, function (err, snapshot) {
-        react(id, snapshot, event, done);
+      db.getInstance(id, function (err, snapshot) {
+        react(id, snapshot, event, sendUrl, finish);
       });
+    }
+
+    function finish (err, conf) {
+      done(null, conf);
+      respond(eventUuid, conf);
     }
   };
 
@@ -196,7 +204,6 @@ module.exports = function (db) {
 
   server.getInstanceSnapshot = completeInstantly;
   server.deleteInstance = completeInstantly;
-  server.deleteStatechart = completeInstantly;
 
   return server;
 };
