@@ -6,7 +6,7 @@ var scxml = require('scxml'),
 
 var instanceSubscriptions = {};
 
-module.exports = function (db, model) {
+module.exports = function (db, model, modelName) {
   var server = {};
   var timeoutMap = {};
   
@@ -148,7 +148,7 @@ module.exports = function (db, model) {
     if(event.name === 'system.start') {
       server.startInstance(id, sendUrl, finish);
     } else {
-      db.getInstance(id, function (err, snapshot) {
+      db.getInstance(modelName, id, function (err, snapshot) {
         react(id, snapshot, event, sendUrl, finish);
       });
     }
