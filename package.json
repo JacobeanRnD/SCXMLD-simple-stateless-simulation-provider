@@ -26,6 +26,7 @@
   },
   "homepage": "https://github.com/JacobeanRnD/SCXMLD-simple-stateless-simulation-provider",
   "dependencies": {
+    "debug": "^2.2.0",
     "request": "^2.55.0",
     "scxml": "git://github.com/jbeard4/SCION.git#dd6465f58882e85ee2a599de9513662e453be21f",
     "uuid": "^2.0.1"
