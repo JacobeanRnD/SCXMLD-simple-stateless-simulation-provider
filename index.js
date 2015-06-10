@@ -2,7 +2,8 @@
 
 var scxml = require('scxml'),
   uuid = require('uuid'),
-  request = require('request');
+  request = require('request'),
+  sendAction = require('./sendAction');
 
 var instanceSubscriptions = {};
 
@@ -31,7 +32,7 @@ module.exports = function (db, model, modelName) {
     });
   }
 
-  function react (instanceId, snapshot, event, sendUrl, done) {
+  function react (instanceId, snapshot, event, sendOptions, eventUuid, done) {
     //Check if chartname.scxml folder exists
       //If it does
       //Use scxml.pathToModel
@@ -49,64 +50,13 @@ module.exports = function (db, model, modelName) {
     var instance = new scxml.scion.Statechart(model, {
       snapshot: snapshot,
       sessionid: instanceId,
-      customSend: function (event, options, sendUrl) {
-        console.log('customSend',event);
-
-        var n;
-
-        switch(event.type) {
-          case 'http://www.w3.org/TR/scxml/#SCXMLEventProcessor':
-            //normalize to an HTTP event
-            //assume this is of the form '/foo/bar/bat'
-          case 'http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor':
-            if(!event.target) {
-              n = function () {
-                sendEventToSelf(event, sendUrl);
-              };
-            } else {
-              n = function(){
-                var options = {
-                  method : 'POST',
-                  json : event,
-                  url : event.target
-                };
-                request(options,function(error, body, response ) {
-                  //ignore the response for now
-                  //console.log('send response', body);
-                });
-              };
-            }
-
-            break;
-
-          case 'http://scxml.io/scxmld':
-            if(event.target === 'scxml://publish'){
-              var subscriptions = instanceSubscriptions[instanceId];
-              console.log('subscriptions for instance', instanceId, subscriptions);
-              subscriptions.forEach(function(response){
-                console.log('response',response);
-                response.write('event: ' + event.name + '\n');
-                response.write('data: ' + JSON.stringify(event.data) + '\n\n');
-              });
-            } 
-            break;
-          default:
-            console.log('wrong processor', event.type);
-            break;
-        }
-
-        var timeoutId = setTimeout(n, options.delay || 0);
-        if (options.sendid) timeoutMap[options.sendid] = timeoutId;
-      },
-      customCancel: function (sendid) {
-        clearTimeout(timeoutMap[sendid]);
-        delete timeoutMap[sendid];
-      }
+      customSend: sendAction.send.bind(this, sendOptions),
+      customCancel: sendAction.cancel
     });
 
     instance.registerListener({
-      onEntry: publishChanges('onEntry'),
-      onExit: publishChanges('onExit')
+      onEntry: publishChanges.bind(this,'onEntry'),
+      onExit: publishChanges.bind(this,'onExit')
     });
 
     //Don't start the instance from the beginning if there no snapshot
@@ -120,17 +70,16 @@ module.exports = function (db, model, modelName) {
     
     done(null, conf);
 
-    function publishChanges (eventName) {
-      return function (stateId) {
-        var subscriptions = instanceSubscriptions[instanceId];
+    //TODO: refactor to go through redis. otherwise, this won't be stateless/scalable.
+    function publishChanges (eventName, stateId) {
+      var subscriptions = instanceSubscriptions[instanceId];
 
-        if(!subscriptions) return;
+      if(!subscriptions) return;
 
-        subscriptions.forEach(function (response) {
-          response.write('event: ' + eventName +'\n');
-          response.write('data: ' + stateId + '\n\n');
-        });
-      };
+      subscriptions.forEach(function (response) {
+        response.write('event: ' + eventName +'\n');
+        response.write('data: ' + stateId + '\n\n');
+      });
     }
   }
 
@@ -140,16 +89,17 @@ module.exports = function (db, model, modelName) {
     done(null, instanceId);
   };
 
-  server.startInstance = function (id, sendUrl, done) {
-    react(id, null, null, sendUrl, done);
+  server.startInstance = function (id, sendOptions, eventUuid, done) {
+    react(id, null, null, sendOptions, eventUuid, done);
   };
 
-  server.sendEvent = function (id, event, sendUrl, eventUuid, done, respond) {
+  //TODO: change respond to use redis
+  server.sendEvent = function (id, event, sendOptions, eventUuid, done, respond) {
     if(event.name === 'system.start') {
-      server.startInstance(id, sendUrl, finish);
+      server.startInstance(id, sendOptions, eventUuid, finish);
     } else {
       db.getInstance(modelName, id, function (err, snapshot) {
-        react(id, snapshot, event, sendUrl, finish);
+        react(id, snapshot, event, sendOptions, eventUuid, finish);
       });
     }
 
