@@ -19,22 +19,6 @@ module.exports = function (db, model, modelName) {
     arguments[arguments.length -1]();
   }
 
-  function sendEventToSelf(event, sendUrl){
-    var selfUrl = sendUrl || process.env.SEND_URL + event.origin;
-    
-    var options = {
-      method : 'POST',
-      json : event,
-      url : selfUrl
-    };
-
-    console.log('sending event to self', options);
-
-    request(options,function(error, response){
-      if(error) console.error('error sending event to server', error || response.body);
-    });
-  }
-
   function react (instanceId, snapshot, event, sendOptions, eventUuid, done) {
 
     //Check if chartname.scxml folder exists
