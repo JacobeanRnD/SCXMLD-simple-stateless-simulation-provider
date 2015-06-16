@@ -29,7 +29,7 @@
     "debug": "^2.2.0",
     "redis": "^0.12.1",
     "request": "^2.55.0",
-    "scxml": "git://github.com/jbeard4/SCION.git#dd6465f58882e85ee2a599de9513662e453be21f",
+    "scxml": "git://github.com/jbeard4/SCION.git#b13854d8f9a406df00f7e656e6dfd5762763d2ac",
     "uuid": "^2.0.1"
   }
 }
