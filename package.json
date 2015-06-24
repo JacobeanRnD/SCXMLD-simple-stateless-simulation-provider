@@ -1,9 +1,9 @@
 {
-  "name": "SCXMLD-simple-stateless-simulation-provider",
-  "version": "0.0.1a",
+  "name": "expresscion-simple-stateless-simulation-provider",
+  "version": "1.0.0",
   "description": "Simple stateless in-memory SCION simulation provider",
   "main": "index.js",
-  "license": "AGPL-3.0",
+  "license": "Apache-2.0",
   "author": {
     "name": "Jacob Beard",
     "email": "jake@jacobeanrnd.com",
@@ -14,7 +14,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/JacobeanRnD/SCXMLD-simple-stateless-simulation-provider.git"
+    "url": "https://github.com/JacobeanRnD/expresscion-simple-stateless-simulation-provider.git"
   },
   "keywords": [
     "docker",
@@ -22,14 +22,14 @@
     "scxml"
   ],
   "bugs": {
-    "url": "https://github.com/JacobeanRnD/SCXMLD-simple-stateless-simulation-provider/issues"
+    "url": "https://github.com/JacobeanRnD/expresscion-simple-stateless-simulation-provider/issues"
   },
-  "homepage": "https://github.com/JacobeanRnD/SCXMLD-simple-stateless-simulation-provider",
+  "homepage": "https://github.com/JacobeanRnD/expresscion-simple-stateless-simulation-provider",
   "dependencies": {
     "debug": "^2.2.0",
     "redis": "^0.12.1",
     "request": "^2.55.0",
-    "scxml": "git://github.com/jbeard4/SCION.git#b13854d8f9a406df00f7e656e6dfd5762763d2ac",
+    "scion": "^2.0.2",
     "uuid": "^2.0.1"
   }
 }
