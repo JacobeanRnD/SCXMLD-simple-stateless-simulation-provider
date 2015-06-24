@@ -1,6 +1,6 @@
 {
   "name": "expresscion-simple-stateless-simulation-provider",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Simple stateless in-memory SCION simulation provider",
   "main": "index.js",
   "license": "Apache-2.0",
