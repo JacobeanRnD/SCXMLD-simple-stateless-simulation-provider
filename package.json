@@ -1,6 +1,6 @@
 {
   "name": "expresscion-simple-stateless-simulation-provider",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Simple stateless in-memory SCION simulation provider",
   "main": "index.js",
   "license": "Apache-2.0",
@@ -29,7 +29,7 @@
     "debug": "^2.2.0",
     "redis": "^0.12.1",
     "request": "^2.55.0",
-    "scxml": "^2.0.3",
+    "scxml": "2.0.6",
     "uuid": "^2.0.1"
   }
 }
