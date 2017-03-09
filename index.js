@@ -56,6 +56,7 @@ module.exports = function (db, model, modelName) {
             if(!targetMatch && targetMatch.length) return done(new Error('Received malformed target url'));
             var target = targetMatch[1];
 
+            console.log('event.name',event.name);
             if(event.name === 'response'){
               respond(target, null, event.data);
             } else if(event.name === 'wait'){
@@ -102,14 +103,14 @@ module.exports = function (db, model, modelName) {
               };
             }
 
+            //FIXME: make it possible to support send/@dely on other send types
+            var timeoutId = setTimeout(n, options.delay || 0);
+            if (options.sendid) timeoutMap[options.sendid] = timeoutId;
             break;
           default:
             console.log('wrong processor', event.type);
             break;
         }
-
-        var timeoutId = setTimeout(n, options.delay || 0);
-        if (options.sendid) timeoutMap[options.sendid] = timeoutId;
       },
       customCancel : function(sendid) {
         var timeoutId = timeoutMap[sendid];
